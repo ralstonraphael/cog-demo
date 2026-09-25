@@ -9,7 +9,10 @@ Clock is cumulative across all prompts and is never reset.
 | ------ | ------------- | -------------- | ----------- | ---------- |
 | 1 — Foundation (schema, seed, auth, shell) | 00:00 | 00:10 | ~10 min | ~10 min |
 | 2 — Backend (reads, decision service, tests) | 00:10 | 00:18 | ~8 min | ~18 min |
-| 1.5 — Parallel foundation audit (3 child sessions) | 00:17 | 00:33 | ~16 min | **~34 min** |
+| 1.5 — Parallel foundation audit (3 child sessions) | 00:17 | 00:33 | ~16 min | ~34 min |
+| 3 — Reviewer interface + audit fixes C1–C3 | 00:34 | 01:10 | ~36 min | **~70 min** |
+
+The KYC milestone (prompts 1–3) landed at ~70 min against the ~65 min target — about 5 min over, most of it spent on browser verification and two UI fixes it surfaced (below). ~50 min remain of the 120-min hard limit for Prompt 4.
 
 ---
 
@@ -176,3 +179,61 @@ the same `requireUser`/`requireReviewer` helpers.
 
 ### Next step
 Prompt 3: reviewer interface. Fold the three IMPORTANT audit fixes (C1–C3 in `docs/foundation-audit.md`) into that step.
+
+---
+
+## Prompt 3 — Reviewer interface
+
+- **Window:** 00:34–01:10 UTC (~36 min wall clock; includes a short forced pause when the session hit a usage limit mid-retest). Cumulative **~70 min**.
+- Decision service, API routes, authorization helpers and schema are unchanged. No new UI framework; plain CSS in `src/app/globals.css`. Demo DB was **not** reset or reseeded.
+
+### Files
+| Path | Purpose |
+| --- | --- |
+| `src/app/(shell)/layout.tsx`, `logout-button.tsx` | Authenticated shell: "Operations Workbench", KYC nav, name + role badge, Log out, "Synthetic demo data" label. Replaces `src/app/app/layout.tsx`; `/app` now redirects to `/kyc`. |
+| `src/app/(shell)/kyc/page.tsx`, `queue-filters.tsx`, `loading.tsx`, `error.tsx` | `/kyc` queue — server-rendered via `requireUserOrRedirect` + `listCases` (same helpers as the API). Filters/search live in URL params (`?q=&status=&risk=`; default PENDING omitted). States: loading, invalid filter (400-equivalent), empty with "Clear filters", route error boundary with Try again. |
+| `src/app/(shell)/kyc/[id]/page.tsx`, `case-view.tsx`, `decision-form.tsx`, `loading.tsx` | `/kyc/[id]` detail — summary, "Synthetic check results" evidence table with per-check hints, reviewer decision form (reviewer + PENDING only), read-only notice for viewers, chronological history. Back link rebuilds `/kyc?…` from the originating filters. Not-found state with back-to-queue link. |
+| `src/components/badges.tsx`, `local-time.tsx` | Status/risk/check badges (text + color); `<time>` rendered UTC on the server, hydrated to local time with tz abbreviation, exact ISO in `dateTime`/`title`. |
+| `src/lib/kyc/labels.ts`, `filters-url.ts`, `src/lib/format.ts` | Display labels (`ESCALATED → "Awaiting supervisor review"`), URL ⇄ filter helpers, date formatting. |
+| `src/lib/auth/auth.ts`, `current-user.ts`, `src/app/api/auth/[...all]/route.ts`, `prisma/seed.ts`, `.env.example` | Audit fixes: **C1** `getCurrentUser` deletes an inactive user's sessions so better-auth's own `get-session` also returns null; **C2** `replace-*` placeholders and secrets < 32 chars are rejected by auth and seed; **C3** auth instance is lazy (`getAuth()` + proxy `auth`) so `next build` no longer needs `BETTER_AUTH_SECRET`. |
+| `tests/inactive-session.test.ts` | New test for C1 (session revoked after deactivation; library endpoint returns null; 0 session rows). |
+
+### Decision form behaviour
+- Approve / Reject / Escalate radios; reason trimmed, 10–500 chars, live counter, inline error next to the textarea (also used for server 400).
+- Native `<dialog>` confirmation showing case ID, customer, action, reason; Cancel closes with no request. Keyboard: Tab/Enter/Esc.
+- `expectedVersion` is the version loaded with the page — no refetch before submit. Submit disabled while in flight; success state only after the 200 body arrives (authoritative `case` + `event` replace local state, controls removed, new event highlighted, "Decision saved" notice).
+- 401 → "sign-in expired" + link to `/sign-in?next=…`; 403 → permission error, no success implied; 404 → not-found; 409 → exact text "This case changed while you were reviewing it. Reload to see the latest decision." with a Reload button (never auto-retries); 503/network → reason retained, Retry button.
+
+### Browser verification (testing agent, Chrome, laptop viewport, dev server on :3000)
+All roles/paths below were actually exercised in the UI:
+1. Alex sign-in → `/kyc` shows 14 pending, oldest first, count matches rows.
+2. Search `Morgan` → 1 result (KYC-1007); status ALL + risk HIGH → 6; `?status=BOGUS` → invalid-filter state; search for nonsense → empty state with Clear filters.
+3. Open KYC-1007 from a filtered queue → evidence shows Manual review / Name mismatch / Address match / `SIM-KYC-1007`; "No decisions recorded yet."; Back to queue restores the filters.
+4. Short reason → inline validation, no request. Confirm dialog → Cancel → no change. Approve KYC-1008 with a reason → status Approved, new history event, controls gone; refresh → persisted; pending queue no longer lists it (13). Escalate KYC-1010 → "Awaiting supervisor review" (pending now 12).
+5. Stale-version conflict (second tab) → exact 409 message + Reload; no auto-retry.
+6. Sign out → anonymous `/kyc` → `/sign-in`. Sign in as Taylor → queue/detail/history readable, "Read-only access" notice, no decision controls.
+7. `/kyc/KYC-9999` → "Case not found" with back link. Keyboard-only confirm flow works; visible focus rings.
+
+**Synthetic records changed during the walkthrough:** `KYC-1008` (Harper Singh) PENDING → APPROVED, `KYC-1010` (Skyler Moreau) PENDING → ESCALATED, both by Alex Reviewer with real audit events. Pending count is now 12. Nothing else was modified; no reset/reseed.
+
+### Defects found by browser testing and fixed
+| Defect | Fix |
+| --- | --- |
+| `LocalTime` threw `TypeError: Invalid option` in Chrome (`dateStyle`/`timeStyle` cannot be combined with `timeZoneName`) | explicit `year/month/day/hour/minute/timeZoneName` options (`0afc0c2`) |
+| Browser Back/Clear restored the URL and results but the filter controls kept the edited values (form-state restoration) | filter form is a small client component keyed by the canonical query string, `autoComplete="off"`, `form.reset()` on mount and `pageshow` (`56f1132`, `1a43d44`). Retested: Back → Morgan/Pending/Any risk (1 result); Forward → blank/All/High (6 results). |
+| `next build` while `next dev` was running corrupted `.next` (`Cannot find module './873.js'`) | operational only — don't share `.next` between build and dev; restarted dev with a clean `.next`. |
+
+### Commands run and results
+| Command | Result |
+| --- | --- |
+| `npx tsc --noEmit` | exit 0 |
+| `npx vitest run` | 3 files / 23 tests passed (22 existing + C1 test) |
+| `next build` (without `BETTER_AUTH_SECRET`) | succeeds (C3) |
+| `getAuth()` with placeholder / 31-char secret | rejected with the expected messages (C2) |
+
+### Remaining interface defects / caveats
+- None open from the verification list. Known limits: no pagination (20-record prototype, by spec); `npm run lint` still unconfigured (type checking is the gate); queue "Submitted" age is not live-updating (static on render, exact time in tooltip).
+- Preview: local dev server only (`npm run dev` → http://localhost:3000). No public deployment, by the working rules.
+
+### Next step
+Prompt 4: final verification and handoff (README, run-book, final checks).
