@@ -6,8 +6,11 @@ export function formatUtc(iso: string): string {
 /** Local-time rendering with timezone context, for use after hydration. */
 export function formatLocal(iso: string): string {
   return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
     timeZoneName: "short",
   }).format(new Date(iso));
 }
