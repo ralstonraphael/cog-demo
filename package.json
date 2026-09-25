@@ -1,0 +1,37 @@
+{
+  "name": "ops-workbench",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Operations Workbench prototype: synthetic KYC review workflow (Next.js, Prisma, SQLite, better-auth)",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:generate": "prisma generate",
+    "db:seed": "tsx --env-file=.env prisma/seed.ts",
+    "db:reset:destructive": "tsx --env-file=.env prisma/reset.ts"
+  },
+  "dependencies": {
+    "@better-auth/prisma-adapter": "^1.7.5",
+    "@prisma/client": "6.19.3",
+    "better-auth": "1.7.5",
+    "next": "15.5.26",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.3",
+    "@types/react": "19.1.8",
+    "@types/react-dom": "19.1.6",
+    "prisma": "6.19.3",
+    "tsx": "4.20.3",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  }
+}

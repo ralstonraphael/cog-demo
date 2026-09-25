@@ -1,0 +1,153 @@
+// Operations Workbench prototype schema (synthetic KYC review workflow).
+// All timestamps are stored in UTC (Prisma DateTime on SQLite = ISO-8601 UTC).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Authentication (better-auth documented Prisma model, plus app fields)
+// ---------------------------------------------------------------------------
+
+enum Role {
+  REVIEWER
+  VIEWER
+}
+
+model User {
+  id            String   @id
+  name          String
+  email         String   @unique
+  emailVerified Boolean  @default(false)
+  image         String?
+  // Application fields
+  role          Role     @default(VIEWER)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  sessions    Session[]
+  accounts    Account[]
+  auditEvents AuditEvent[]
+
+  @@map("user")
+}
+
+// Server-side session store. A row is created on sign-in and deleted on
+// sign-out; `expiresAt` is enforced by better-auth on every lookup.
+model Session {
+  id        String   @id
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+// Credential accounts hold the password hash (better-auth `credential`
+// provider). One row per user for this prototype.
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+// ---------------------------------------------------------------------------
+// KYC review domain
+// ---------------------------------------------------------------------------
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum CaseStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ESCALATED
+}
+
+enum AuditEventType {
+  CASE_CREATED
+  DECISION
+}
+
+// Current state of a case. History lives in AuditEvent.
+model KycCase {
+  id           String     @id // e.g. KYC-1007
+  customerName String
+  submittedAt  DateTime
+  riskLevel    RiskLevel
+  // Structured synthetic evidence, JSON-encoded (see src/lib/kyc/evidence.ts).
+  evidence     String
+  status       CaseStatus @default(PENDING)
+  version      Int        @default(0)
+  updatedAt    DateTime   @updatedAt
+
+  events AuditEvent[]
+
+  @@index([status, submittedAt])
+  @@map("kyc_case")
+}
+
+model AuditEvent {
+  id             String         @id @default(cuid())
+  caseId         String
+  actorId        String
+  type           AuditEventType
+  previousStatus CaseStatus
+  newStatus      CaseStatus
+  previousVersion Int
+  newVersion     Int
+  reason         String
+  createdAt      DateTime       @default(now())
+
+  case  KycCase @relation(fields: [caseId], references: [id])
+  actor User    @relation(fields: [actorId], references: [id])
+
+  // At most one committed transition per case version.
+  @@unique([caseId, newVersion])
+  @@index([caseId, createdAt])
+  @@map("audit_event")
+}
