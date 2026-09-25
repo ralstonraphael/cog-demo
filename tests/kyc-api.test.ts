@@ -170,7 +170,7 @@ describe("decision endpoint", () => {
     const esc = await postDecision("KYC-1008", { cookie: alex, body: body({ action: "ESCALATE" }) });
     expect(esc.status).toBe(200);
     expect(esc.json.case.status).toBe("ESCALATED");
-    const app = await postDecision("KYC-1009", { cookie: alex, body: body({ action: "APPROVE" }) });
+    const app = await postDecision("KYC-1010", { cookie: alex, body: body({ action: "APPROVE" }) });
     expect(app.status).toBe(200);
     expect(app.json.case.status).toBe("APPROVED");
   });

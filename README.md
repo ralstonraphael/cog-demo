@@ -19,6 +19,12 @@ Stack: Next.js 15 (App Router, TypeScript) · Prisma 6 · file-backed SQLite · 
   conditional case update and an audit insert **in one database transaction**,
   with optimistic concurrency (`expectedVersion`) so stale or competing
   decisions are rejected with `409` instead of overwriting the accepted result.
+- A **fictional demonstration policy** (maintenance experiment, see
+  `docs/verification.md` §8): HIGH-risk cases cannot be approved directly —
+  only rejected or escalated. The server enforces it from the persisted risk
+  level (`422 HIGH_RISK_REQUIRES_ESCALATION`, no state or audit change); the UI
+  hides Approve for such cases and explains why. This is not a claim about any
+  client's actual policy or regulatory obligations.
 - **Role-aware access**: reviewers decide; viewers can read cases and history
   but every mutation path (UI and direct API) rejects them server-side.
 - **Durable audit history**: decisions and their audit events survive an
@@ -179,7 +185,7 @@ HTTP API (all responses `Cache-Control: no-store, private`, `Vary: Cookie`):
 | --- | --- | --- |
 | `GET /api/kyc-cases?status=&risk=&q=` | any signed-in user | `401` anonymous, `400` invalid filter |
 | `GET /api/kyc-cases/:id` | any signed-in user | evidence + ordered history with actor names; `404` unknown |
-| `POST /api/kyc-cases/:id/decisions` | `REVIEWER` only, same-origin | body exactly `{ action, reason, expectedVersion }`; `401/403/400/404/409/503` |
+| `POST /api/kyc-cases/:id/decisions` | `REVIEWER` only, same-origin | body exactly `{ action, reason, expectedVersion }`; `401/403/400/404/409/422/503` (`422` = APPROVE on a pending HIGH-risk case) |
 
 ## 9. Prototype limitations
 

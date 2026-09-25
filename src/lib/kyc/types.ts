@@ -39,5 +39,16 @@ export const ACTION_TO_STATUS: Record<DecisionAction, Exclude<CaseStatus, "PENDI
   ESCALATE: "ESCALATED",
 };
 
+/**
+ * Demonstration policy (fictional): HIGH-risk cases cannot be approved directly;
+ * they may only be rejected or escalated. Lower risk levels keep every action.
+ */
+export const HIGH_RISK_POLICY_MESSAGE =
+  "High-risk cases require escalation for approval. You can reject this case or send it for supervisor review.";
+
+export function allowedActions(riskLevel: RiskLevel): readonly DecisionAction[] {
+  return riskLevel === "HIGH" ? DECISION_ACTIONS.filter((a) => a !== "APPROVE") : DECISION_ACTIONS;
+}
+
 export const REASON_MIN_LENGTH = 10;
 export const REASON_MAX_LENGTH = 500;

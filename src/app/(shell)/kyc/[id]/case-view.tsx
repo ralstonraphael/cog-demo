@@ -120,6 +120,7 @@ export function CaseView({ initial, canDecide, backHref }: Props) {
             <DecisionForm
               caseId={current.id}
               customerName={current.customerName}
+              riskLevel={current.riskLevel}
               expectedVersion={current.version}
               onCommitted={onCommitted}
             />
