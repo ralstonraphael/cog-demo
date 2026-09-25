@@ -8,6 +8,8 @@ evidence and accounts are synthetic demo data.**
 
 Stack: Next.js 15 (App Router, TypeScript) · Prisma 6 · file-backed SQLite · better-auth 1.7.
 
+[Watch the 4:49 demo](https://www.loom.com/share/7a82bc3376074a839c84fedef892d524). The prototype runs locally; there is no hosted application.
+
 ## 1. What the prototype demonstrates
 
 - A **reviewer queue** (`/kyc`) of pending synthetic cases with status/risk filters and search.
