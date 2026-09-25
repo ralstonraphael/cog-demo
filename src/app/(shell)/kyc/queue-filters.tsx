@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useRef } from "react";
 import { RISK_LABELS, STATUS_LABELS } from "@/lib/kyc/labels";
 import { filtersToQuery } from "@/lib/kyc/filters-url";
 import { type CaseListFilters, SEARCH_MAX_LENGTH } from "@/lib/kyc/queries";
@@ -8,14 +11,29 @@ const RISK_OPTIONS = ["LOW", "MEDIUM", "HIGH"] as const;
 
 /**
  * Plain GET form: filters live in the URL, so browser navigation and the
- * back-to-queue link keep the reviewer's context without client state. The
- * form is keyed by the canonical query so uncontrolled inputs remount (and
- * show the URL's values) on client-side navigation such as Back.
+ * back-to-queue link keep the reviewer's context without client state.
+ *
+ * Browsers restore edited field values on history navigation (form restoration
+ * and back/forward cache), which would show controls that disagree with the
+ * URL. The form is keyed by the canonical query, opts out of autocomplete, and
+ * resets to the URL-derived defaults whenever the page is shown.
  */
 export function QueueFilters({ filters }: { filters: CaseListFilters }) {
+  const formRef = useRef<HTMLFormElement>(null);
+  const query = filtersToQuery(filters);
+
+  useEffect(() => {
+    formRef.current?.reset();
+    const onPageShow = () => formRef.current?.reset();
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, [query]);
+
   return (
     <form
-      key={filtersToQuery(filters)}
+      key={query}
+      ref={formRef}
+      autoComplete="off"
       method="get"
       action="/kyc"
       className="card filters"
