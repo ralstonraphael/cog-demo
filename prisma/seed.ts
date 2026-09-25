@@ -22,6 +22,9 @@ export async function seed(prisma: PrismaClient, env: NodeJS.ProcessEnv = proces
     if (!password || password.length < 8) {
       throw new Error(`Environment variable ${fixture.passwordEnv} must be set (>= 8 chars). See .env.example.`);
     }
+    if (password.startsWith("replace-")) {
+      throw new Error(`${fixture.passwordEnv} still holds the placeholder from .env.example; set a real local value.`);
+    }
     const passwordHash = await hashPassword(password);
     const existing = await prisma.user.findUnique({ where: { id: fixture.id }, select: { id: true } });
 

@@ -4,9 +4,19 @@ import { SignInForm } from "./sign-in-form";
 
 export const dynamic = "force-dynamic";
 
-export default async function SignInPage() {
+type Props = { searchParams: Promise<{ next?: string | string[] }> };
+
+/** Only same-app paths are honoured as post-sign-in destinations. */
+function safeNext(raw: string | string[] | undefined): string {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/kyc";
+  return value;
+}
+
+export default async function SignInPage({ searchParams }: Props) {
+  const next = safeNext((await searchParams).next);
   const user = await getCurrentUser();
-  if (user) redirect("/app");
+  if (user) redirect(next);
 
   return (
     <>
@@ -15,7 +25,7 @@ export default async function SignInPage() {
         <div className="card">
           <h1 style={{ fontSize: 20, marginTop: 0 }}>Operations Workbench</h1>
           <p className="muted">Sign in with a seeded demo account.</p>
-          <SignInForm />
+          <SignInForm next={next} />
         </div>
       </main>
     </>

@@ -1,5 +1,6 @@
 import type { Role } from "@prisma/client";
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db";
 
@@ -38,7 +39,13 @@ export async function getCurrentUser(requestHeaders?: Headers): Promise<CurrentU
     where: { id: session.user.id },
     select: { id: true, name: true, email: true, role: true, active: true },
   });
-  if (!user || !user.active) return null;
+  if (!user) return null;
+  if (!user.active) {
+    // Deactivation revokes every existing session so the library's own
+    // session endpoint stops serving this user too.
+    await prisma.session.deleteMany({ where: { userId: user.id } });
+    return null;
+  }
 
   return { id: user.id, name: user.name, email: user.email, role: user.role };
 }
@@ -47,6 +54,16 @@ export async function getCurrentUser(requestHeaders?: Headers): Promise<CurrentU
 export async function requireUser(requestHeaders?: Headers): Promise<CurrentUser> {
   const user = await getCurrentUser(requestHeaders);
   if (!user) throw new AuthError(401, "Authentication required.");
+  return user;
+}
+
+/**
+ * Server-page variant of `requireUser`: redirects anonymous users to sign-in
+ * (returning them to `returnTo` afterwards) instead of throwing.
+ */
+export async function requireUserOrRedirect(returnTo: string): Promise<CurrentUser> {
+  const user = await getCurrentUser();
+  if (!user) redirect(`/sign-in?next=${encodeURIComponent(returnTo)}`);
   return user;
 }
 

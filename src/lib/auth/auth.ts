@@ -7,10 +7,18 @@ import { prisma } from "@/lib/db";
 const SESSION_TTL_SECONDS = 60 * 60 * 8; // 8 hours
 const SESSION_REFRESH_SECONDS = 60 * 30;
 
-function requireEnv(name: string): string {
+const MIN_SECRET_LENGTH = 32;
+
+function requireEnv(name: string, minLength = 1): string {
   const value = process.env[name];
   if (!value) {
     throw new Error(`Missing required environment variable ${name} (see .env.example)`);
+  }
+  if (value.startsWith("replace-")) {
+    throw new Error(`${name} still holds the placeholder from .env.example; set a real local value.`);
+  }
+  if (value.length < minLength) {
+    throw new Error(`${name} must be at least ${minLength} characters.`);
   }
   return value;
 }
@@ -18,7 +26,7 @@ function requireEnv(name: string): string {
 export function createAuth(db: typeof prisma) {
   return betterAuth({
     appName: "Operations Workbench",
-    secret: requireEnv("BETTER_AUTH_SECRET"),
+    secret: requireEnv("BETTER_AUTH_SECRET", MIN_SECRET_LENGTH),
     baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
     trustedOrigins: [process.env.BETTER_AUTH_URL ?? "http://localhost:3000"],
     database: prismaAdapter(db, { provider: "sqlite" }),
@@ -64,5 +72,17 @@ export function createAuth(db: typeof prisma) {
   });
 }
 
-export const auth = createAuth(prisma);
-export type Auth = typeof auth;
+export type Auth = ReturnType<typeof createAuth>;
+
+let instance: Auth | undefined;
+
+/** Builds the auth instance on first use so `next build` does not need runtime secrets. */
+export function getAuth(): Auth {
+  instance ??= createAuth(prisma);
+  return instance;
+}
+
+export const auth: Auth = new Proxy({} as Auth, {
+  get: (_target, prop) => Reflect.get(getAuth(), prop),
+  has: (_target, prop) => prop in getAuth(),
+});

@@ -5,5 +5,5 @@ export const dynamic = "force-dynamic";
 
 export default async function IndexPage() {
   const user = await getCurrentUser();
-  redirect(user ? "/app" : "/sign-in");
+  redirect(user ? "/kyc" : "/sign-in");
 }
