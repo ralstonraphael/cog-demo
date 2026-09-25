@@ -10,9 +10,13 @@ Clock is cumulative across all prompts and is never reset.
 | 1 — Foundation (schema, seed, auth, shell) | 00:00 | 00:10 | ~10 min | ~10 min |
 | 2 — Backend (reads, decision service, tests) | 00:10 | 00:18 | ~8 min | ~18 min |
 | 1.5 — Parallel foundation audit (3 child sessions) | 00:17 | 00:33 | ~16 min | ~34 min |
-| 3 — Reviewer interface + audit fixes C1–C3 | 00:34 | 01:10 | ~36 min | **~70 min** |
+| 3 — Reviewer interface + audit fixes C1–C3 | 00:34 | 01:10 | ~36 min | ~70 min |
+| 4 — Verification + handoff (README, verification.md, persistence/clean-setup tests) | ~01:12 | 01:36 | ~24 min | **~96 min** |
 
-The KYC milestone (prompts 1–3) landed at ~70 min against the ~65 min target — about 5 min over, most of it spent on browser verification and two UI fixes it surfaced (below). ~50 min remain of the 120-min hard limit for Prompt 4.
+- **Final timestamp:** 2026-09-25 01:36 UTC. **Total elapsed across all four prompts: ~96 min** (initial start 00:00 UTC), inside the 120-min hard limit; the KYC milestone itself (prompts 1–3) landed at ~70 min against the ~65 min target.
+- Devin usage (ACUs) is not directly visible from inside the sessions; the coordinator reported `0.0` per child during the audit (reporting lag) — not recorded here.
+
+The KYC milestone (prompts 1–3) was about 5 min over target, most of it spent on browser verification and two UI fixes it surfaced (below).
 
 ---
 
@@ -237,3 +241,27 @@ All roles/paths below were actually exercised in the UI:
 
 ### Next step
 Prompt 4: final verification and handoff (README, run-book, final checks).
+
+---
+
+## Prompt 4 — Verification and handoff
+
+- **Window:** ~01:12–01:36 UTC (~24 min). Cumulative **~96 min**. No new product features; architecture unchanged.
+- Full command list, results, persistence test and acceptance matrix: **`docs/verification.md`**. Reviewer-facing setup, walkthrough and limitations: **`README.md`**.
+
+### Done
+- Critical-path review (session → role → validation → conditional update → audit insert → commit → browser state) and the seven gap checks: no defects found (`docs/verification.md` §1).
+- Required checks at this revision: `typecheck` exit 0; `npm test` 3 files / 23 tests passed; `npm run build` exit 0; production server smoke (401/307 for anonymous).
+- Persistence: real decision on the demo DB (`KYC-1012` → `REJECTED`, v1, event `cmuga44fl0001qhi3xiz8wrf7`), process stopped (port confirmed closed), restarted with the same `DATABASE_URL`, no reseed; decision and event present via API and via a direct SQLite read. Demo DB not reset.
+- Clean reproducibility in a fresh `git clone` with its own DB (`file:./clean-verify.db`, port 3100): `npm ci` → `.env` → `db:migrate` → `db:seed` → `next dev` → documented sign-ins (Alex, Taylor) → `npm test` 23/23. Unedited `.env.example` is correctly refused by the seed.
+- Small corrections: removed the non-functional `lint` script (`next lint` deprecated, blocked on an interactive ESLint prompt — audit finding F3); added `engines.node >= 20.6` and `.nvmrc` (F7); `db:reset:destructive` now prints its target and refuses non-`file:` URLs (F4). README rewritten per the handoff checklist; `docs/verification.md` added.
+
+### Human interventions and corrections across the build
+- The prompts themselves were the only human input; no code was hand-edited by a person. Corrections came from the parallel audit (Step 1.5: C1 inactive-session revocation, C2 placeholder/short-secret rejection, C3 lazy auth for `next build`) and from browser testing in Prompt 3 (`LocalTime` Intl options; filter form state on Back/Clear). Prompt 4 found no critical-path defects and only made the hygiene fixes above.
+- Operational notes rather than defects: the Prompt 3 demo database lived on another machine, so the Prompt 4 demo DB was created fresh with the documented migrate + seed commands before the persistence test; killing the npm wrapper leaves `next-server` running (kill the child or use the port).
+
+### Scope completed
+Prompts 1–4 as specified: schema/migrations/seed/reset; better-auth email/password with roles and inactive-user handling; case list/detail APIs; transactional decision endpoint with optimistic concurrency and audit events; reviewer queue, case detail, evidence, decision form, history, viewer read-only mode; 23 backend tests on isolated SQLite; browser verification (Prompt 3); persistence and clean-setup verification; README, verification report, build log.
+
+### Scope deferred (not attempted)
+Escalation resolution / supervisor queue; SSO (Microsoft Entra ID), MFA, provisioning; PostgreSQL migration and re-test; tamper-evident audit storage; ESLint setup; pagination; public deployment; any real KYC provider or external integration.
