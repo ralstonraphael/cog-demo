@@ -4,6 +4,7 @@ import type { CurrentUser } from "@/lib/auth/current-user";
 import { detailInclude, toDetail } from "@/lib/kyc/queries";
 import {
   ACTION_TO_STATUS,
+  allowedActions,
   DECISION_ACTIONS,
   REASON_MAX_LENGTH,
   REASON_MIN_LENGTH,
@@ -28,6 +29,7 @@ export type DecisionInput = z.infer<typeof decisionInputSchema>;
 export type DecisionOutcome =
   | { kind: "OK"; case: CaseDetail; event: DecisionEvent }
   | { kind: "NOT_FOUND" }
+  | { kind: "POLICY_BLOCKED"; code: "HIGH_RISK_REQUIRES_ESCALATION" }
   | { kind: "CONFLICT"; reason: "NOT_PENDING" | "VERSION_MISMATCH"; currentStatus: string; currentVersion: number }
   | { kind: "RETRYABLE"; message: string };
 
@@ -43,6 +45,13 @@ class ConflictSignal extends Error {
   constructor() {
     super("conflict");
     this.name = "ConflictSignal";
+  }
+}
+
+class PolicySignal extends Error {
+  constructor() {
+    super("policy");
+    this.name = "PolicySignal";
   }
 }
 
@@ -75,6 +84,9 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * failure after the update rolls both back. Transient SQLite contention is
  * retried a bounded number of times with the caller's original
  * `expectedVersion`; the request is never re-based onto a newer version.
+ *
+ * The risk-level policy is evaluated inside the transaction against the
+ * persisted row, before any write, so a blocked action leaves no trace.
  */
 export async function decideCase(
   db: DecisionDb,
@@ -93,6 +105,15 @@ export async function decideCase(
     try {
       return await db.$transaction(
         async (tx) => {
+          const persisted = await tx.kycCase.findUnique({
+            where: { id: caseId },
+            select: { status: true, riskLevel: true },
+          });
+          if (!persisted) throw new ConflictSignal();
+          if (persisted.status === "PENDING" && !allowedActions(persisted.riskLevel).includes(input.action)) {
+            throw new PolicySignal();
+          }
+
           const updated = await tx.kycCase.updateMany({
             where: { id: caseId, status: "PENDING", version: input.expectedVersion },
             data: { status: newStatus, version: { increment: 1 } },
@@ -126,6 +147,9 @@ export async function decideCase(
     } catch (error) {
       if (error instanceof ConflictSignal) {
         return explainConflict(db, caseId);
+      }
+      if (error instanceof PolicySignal) {
+        return { kind: "POLICY_BLOCKED", code: "HIGH_RISK_REQUIRES_ESCALATION" };
       }
       if (isTransientDbError(error)) {
         lastTransient = error;

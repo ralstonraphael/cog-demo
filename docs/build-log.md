@@ -265,3 +265,27 @@ Prompts 1–4 as specified: schema/migrations/seed/reset; better-auth email/pass
 
 ### Scope deferred (not attempted)
 Escalation resolution / supervisor queue; SSO (Microsoft Entra ID), MFA, provisioning; PostgreSQL migration and re-test; tamper-evident audit storage; ESLint setup; pagination; public deployment; any real KYC provider or external integration.
+
+---
+
+## Post-milestone — maintenance experiment: high-risk approval rule
+
+- **Baseline accepted:** `21fb5c0` (branch `devin/1790299934-prompt4-verification-handoff`, PR #1) — left intact.
+- **Experiment branch:** `devin/1790300421-high-risk-approval-rule`, derived from `21fb5c0`.
+- **Window:** 01:40 → ~01:53 UTC (**~13 min**). Cumulative prototype time **~109 min** of 120 (96 min milestone + 13 min experiment). Devin usage (ACUs) not directly visible.
+- **What this measures:** changing one business rule in one existing workflow while keeping permissions, transactions, audit history and the reviewer experience. It does **not** measure adding a second workflow or operating the application in production.
+
+### Change
+Fictional demo policy: HIGH-risk cases cannot be approved directly (reject or escalate only); LOW/MEDIUM unchanged. Enforced in `decideCase` from the persisted `riskLevel` inside the existing transaction before any write → `422 HIGH_RISK_REQUIRES_ESCALATION`, no state or audit change. UI hides Approve for HIGH cases with the explanation text and handles a server `422` gracefully. Details, file list and test list: `docs/verification.md` §8.
+
+### Results
+- `typecheck` exit 0 · `npm test` 4 files / 30 tests (23 existing + 7 new) · `npm run build` exit 0.
+- Live API probe on the demo DB: APPROVE `KYC-1009` → 422, case unchanged.
+- Recorded browser run (dev server, demo DB): HIGH case controls and note, escalate `KYC-1015` saved with history, LOW/MEDIUM unchanged, direct same-origin APPROVE → 422 with no change, viewer read-only. Only `KYC-1015` changed state.
+- One pre-existing test adjusted: it approved `KYC-1009` (HIGH), now forbidden by design; switched to `KYC-1010` (LOW). No other test changes.
+
+### Human corrections
+None. Operational detour only: the browser check first targeted `next start`, whose `__Secure-` cookies the test browser dropped over plain http; re-run on `npm run dev` (same DB). Production-mode browser behaviour was not re-verified in this run.
+
+### Regressions / unfinished
+None found. No historical decisions or audit events were rewritten. Rule is a hard-coded function (`allowedActions`) by design — no policy engine.

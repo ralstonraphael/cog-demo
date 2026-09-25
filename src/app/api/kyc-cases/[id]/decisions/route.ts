@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { errorResponse, handleRouteError, isSameOriginRequest, jsonResponse, readJsonBody } from "@/lib/http/api";
 import { decideCase, decisionInputSchema } from "@/lib/kyc/decision-service";
 import { CASE_ID_PATTERN } from "@/lib/kyc/queries";
+import { HIGH_RISK_POLICY_MESSAGE } from "@/lib/kyc/types";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,8 @@ export async function POST(request: Request, context: RouteContext): Promise<Res
         return jsonResponse({ case: outcome.case, event: outcome.event });
       case "NOT_FOUND":
         return errorResponse(404, "CASE_NOT_FOUND", "Case not found.");
+      case "POLICY_BLOCKED":
+        return errorResponse(422, outcome.code, HIGH_RISK_POLICY_MESSAGE);
       case "CONFLICT":
         return jsonResponse(
           {

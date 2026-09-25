@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import type { RiskLevel } from "@prisma/client";
 import { useEffect, useId, useRef, useState } from "react";
 import { StatusBadge } from "@/components/badges";
 import { ACTION_LABELS } from "@/lib/kyc/labels";
 import {
   ACTION_TO_STATUS,
-  DECISION_ACTIONS,
+  allowedActions,
+  HIGH_RISK_POLICY_MESSAGE,
   type CaseDetail,
   type DecisionAction,
   type DecisionEvent,
@@ -17,6 +19,7 @@ import {
 type Props = {
   caseId: string;
   customerName: string;
+  riskLevel: RiskLevel;
   /** Version loaded with the case; sent as expectedVersion, never refreshed before submit. */
   expectedVersion: number;
   onCommitted: (updated: CaseDetail, event: DecisionEvent) => void;
@@ -28,13 +31,15 @@ type SubmitError =
   | { kind: "forbidden"; message: string }
   | { kind: "notFound" }
   | { kind: "conflict"; currentStatus?: string }
+  | { kind: "policy"; message: string }
   | { kind: "failure"; message: string };
 
 type ErrorBody = { error?: { code?: string; message?: string; currentStatus?: string } };
 
 const CONFLICT_MESSAGE = "This case changed while you were reviewing it. Reload to see the latest decision.";
 
-export function DecisionForm({ caseId, customerName, expectedVersion, onCommitted }: Props) {
+export function DecisionForm({ caseId, customerName, riskLevel, expectedVersion, onCommitted }: Props) {
+  const actions = allowedActions(riskLevel);
   const [action, setAction] = useState<DecisionAction | null>(null);
   const [reason, setReason] = useState("");
   const [touched, setTouched] = useState(false);
@@ -125,6 +130,10 @@ export function DecisionForm({ caseId, customerName, expectedVersion, onCommitte
       case 409:
         setError({ kind: "conflict", currentStatus: err?.currentStatus });
         return;
+      case 422:
+        setAction(null);
+        setError({ kind: "policy", message: err?.message ?? HIGH_RISK_POLICY_MESSAGE });
+        return;
       default:
         setError({
           kind: "failure",
@@ -154,7 +163,12 @@ export function DecisionForm({ caseId, customerName, expectedVersion, onCommitte
     >
       <fieldset className="action-group" disabled={submitting}>
         <legend>Action</legend>
-        {DECISION_ACTIONS.map((a) => (
+        {riskLevel === "HIGH" ? (
+          <p className="muted policy-note" role="note">
+            {HIGH_RISK_POLICY_MESSAGE}
+          </p>
+        ) : null}
+        {actions.map((a) => (
           <label key={a} className={`action-option action-${a.toLowerCase()}`}>
             <input
               type="radio"
@@ -297,6 +311,13 @@ function ErrorNotice({
           <Link className="btn" href="/kyc">
             Back to queue
           </Link>
+        </div>
+      );
+    case "policy":
+      return (
+        <div className="notice notice-error" role="alert">
+          <p>{error.message}</p>
+          <p className="muted">Nothing was saved. Your reason has been kept; choose Reject or Escalate.</p>
         </div>
       );
     case "conflict":

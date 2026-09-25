@@ -147,3 +147,90 @@ Failed checks: none.
 - Pagination for larger queues; live-updating ages in the queue.
 - No public preview deployment (local `npm run dev` only, by the working rules).
 - Browser checks were not repeated in Prompt 4; the Prompt 3 recording/notes are the evidence.
+
+## 8. Maintenance experiment — high-risk approval rule (post-milestone)
+
+Branch `devin/1790300421-high-risk-approval-rule`, derived from the accepted
+baseline `21fb5c0` (which stays intact on its own branch / PR #1). Started
+**01:40 UTC** with the milestone total at ~96 min.
+
+**Scope of this measurement.** It measures the cost of changing one business
+rule inside one existing workflow. It does not measure adding a second
+workflow, nor operating the application in production.
+
+**Rule (fictional demo policy).** "High-risk KYC cases cannot be approved
+directly. A reviewer may reject or escalate them. Low- and medium-risk cases
+retain the existing available decisions."
+
+### Files changed
+| File | Change |
+| --- | --- |
+| `src/lib/kyc/types.ts` | `allowedActions(riskLevel)` (single source of truth) and `HIGH_RISK_POLICY_MESSAGE` |
+| `src/lib/kyc/decision-service.ts` | inside the existing transaction, before any write: read `{status, riskLevel}` from the persisted row; a disallowed action on a PENDING case throws `PolicySignal` → outcome `POLICY_BLOCKED`. Authorization, reason validation, conditional `updateMany`, audit insert, retry and conflict handling unchanged |
+| `src/app/api/kyc-cases/[id]/decisions/route.ts` | `POLICY_BLOCKED` → `422 { error: { code: "HIGH_RISK_REQUIRES_ESCALATION", message } }` |
+| `src/app/(shell)/kyc/[id]/decision-form.tsx` | takes `riskLevel`; renders only `allowedActions`; shows the policy note for HIGH cases; handles a `422` from a stale UI (message shown, action cleared, reason kept, nothing saved) |
+| `src/app/(shell)/kyc/[id]/case-view.tsx` | passes `riskLevel` to the form |
+| `tests/high-risk-policy.test.ts` (new) | 7 focused tests |
+| `tests/kyc-api.test.ts` | one existing test approved `KYC-1009` (HIGH); switched to `KYC-1010` (LOW) because that behaviour is now intentionally forbidden |
+
+Precedence: a decided case still returns `409` (not `422`) so existing
+conflict handling is unchanged; version mismatch on a pending HIGH APPROVE
+returns `422` (the action would never be allowed at any version).
+
+### Tests added (`tests/high-risk-policy.test.ts`)
+1. direct APPROVE of pending HIGH `KYC-1009` → `422 HIGH_RISK_REQUIRES_ESCALATION`; row unchanged (PENDING v0, no events), global event count unchanged
+2. client-supplied `riskLevel` is rejected (`400`), policy uses the persisted value
+3. REJECT of pending HIGH → `200`, REJECTED v1, exactly one event with actor and reason
+4. ESCALATE of pending HIGH `KYC-1012` → `200`, ESCALATED v1, one event
+5. late APPROVE of the now-decided HIGH case → `409 CASE_NOT_PENDING`
+6. APPROVE of LOW `KYC-1008` and MEDIUM `KYC-1007` → `200 APPROVED`
+7. viewer APPROVE/REJECT/ESCALATE on HIGH → `403`, no writes
+
+### Checks at this revision
+| Command | Result |
+| --- | --- |
+| `npm run typecheck` | exit 0 |
+| `npm test` | 4 files / **30 tests passed** (23 existing + 7 new) |
+| `npm run build` | exit 0 |
+| live probe (demo DB, Alex): `POST /api/kyc-cases/KYC-1009/decisions` APPROVE | `422 HIGH_RISK_REQUIRES_ESCALATION`; case still `PENDING v0`, history 0 |
+| browser (dev server, demo DB) | see "Browser verification" below |
+
+### Browser verification
+Recorded run on `npm run dev` against the demo DB (Alex, then Taylor). All
+five steps passed:
+1. `KYC-1015` (HIGH, pending v0): policy note shown; only Reject and Escalate
+   offered; Approve absent.
+2. Escalate `KYC-1015` with a reason → success notice, ESCALATED v1, one
+   history entry by Alex Reviewer with the reason.
+3. `KYC-1014` (MEDIUM) and `KYC-1013` (LOW): all three actions, no policy
+   note; no decisions submitted.
+4. Server authority: from the signed-in browser, a direct same-origin `fetch`
+   POST of `APPROVE` for `KYC-1018` (HIGH) → `422 HIGH_RISK_REQUIRES_ESCALATION`;
+   after reload the case is still PENDING v0 with no history.
+5. Taylor (viewer): "Read-only access", no decision form on either case;
+   `KYC-1015` shows Alex's escalation.
+Demo DB state change from this run: only `KYC-1015` (PENDING → ESCALATED).
+Recording and screenshots are attached to the handoff message (not committed).
+Production-mode (`next start`) browser behaviour was not re-verified in this
+run because of the plain-http cookie caveat; the API/tests cover the server
+rule in both modes.
+
+### Human corrections
+None during this change. One operational detour: the browser check was first
+attempted against `next start`, whose `__Secure-` cookies the test browser
+dropped over plain http; switched to `npm run dev` (as in Prompt 3).
+
+### Regressions / unfinished
+- No test regressions (all 23 prior tests pass; one adjusted as noted above).
+- Historical decisions and audit events were not touched; the previously
+  approved HIGH cases in the seed (none — seeded APPROVED cases are LOW) and
+  all audit rows remain as they were.
+- Unfinished: none within the stated scope. The rule is hard-coded (by design:
+  no policy engine); changing thresholds means editing `allowedActions`.
+
+### Elapsed
+- Implementation + focused tests + typecheck/test/build: 01:40 → 01:43 UTC (~3 min of
+  agent time; tests green at 01:42).
+- Browser verification (recorded) + live API probe + documentation: 01:43 → ~01:53 UTC.
+- **Experiment total: ~13 min. Cumulative prototype time: ~96 + 13 = ~109 min**
+  of the 120-minute timebox.
