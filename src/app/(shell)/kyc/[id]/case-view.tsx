@@ -58,7 +58,7 @@ export function CaseView({ initial, canDecide, backHref }: Props) {
             </div>
             <div>
               <dt>Version</dt>
-              <dd>{current.version}</dd>
+              <dd>v{current.version}</dd>
             </div>
           </dl>
         </div>

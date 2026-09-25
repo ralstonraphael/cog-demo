@@ -4,12 +4,15 @@
  * development database (prisma/dev.db) is never touched.
  */
 import { execFileSync } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 const dir = mkdtempSync(path.join(tmpdir(), "kyc-test-"));
 const dbPath = path.join(dir, "test.db");
+// Prisma's SQLite schema engine on macOS needs the empty file to exist before
+// migrate deploy can open an absolute file: URL.
+writeFileSync(dbPath, "");
 
 process.env.DATABASE_URL = `file:${dbPath}`;
 process.env.BETTER_AUTH_SECRET = "test-only-secret-0123456789abcdefghijklmnopqrstuvwxyz";

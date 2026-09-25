@@ -115,7 +115,7 @@ request; nothing client-supplied is used for authorization. Deactivating a user
 | `npm run dev` | Development server on http://localhost:3000 |
 | `npm run build` / `npm run start` | Production build / serve the build (`start` sets `Secure` cookies; use `http://localhost:3000` as `BETTER_AUTH_URL`) |
 | `npm run typecheck` | `tsc --noEmit` — the static gate (no ESLint is configured in this prototype) |
-| `npm test` | Vitest: 23 backend tests (auth, authorization, validation, transaction/rollback, concurrency) against an **isolated temporary SQLite file** created in `tests/setup.ts`; your `prisma/dev.db` is never touched |
+| `npm test` | Vitest: 30 backend tests (auth, authorization, validation, transaction/rollback, concurrency, high-risk policy) against an **isolated temporary SQLite file** created in `tests/setup.ts`; your `prisma/dev.db` is never touched |
 | `npm run db:*` | See section 4 |
 
 Do not run `npm run build` while `npm run dev` is running against the same
