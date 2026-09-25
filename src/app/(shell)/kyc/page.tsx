@@ -89,7 +89,11 @@ export default async function QueuePage({ searchParams }: Props) {
                       {c.id}
                     </Link>
                   </td>
-                  <td>{c.customerName}</td>
+                  <td>
+                    <Link href={`/kyc/${c.id}${detailQuery}`} className="customer-link">
+                      {c.customerName}
+                    </Link>
+                  </td>
                   <td>
                     <LocalTime iso={c.submittedAt} showAge />
                   </td>

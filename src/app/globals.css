@@ -533,6 +533,24 @@ legend {
   text-decoration: underline;
 }
 
+.customer-link {
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.customer-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.demo-accounts {
+  margin-top: 12px;
+  line-height: 1.7;
+  border-top: 1px dashed var(--border);
+  padding-top: 12px;
+}
+
 .empty-state {
   padding: 40px 20px;
   text-align: center;
