@@ -8,7 +8,8 @@ Clock is cumulative across all prompts and is never reset.
 | Prompt | Started (UTC) | Finished (UTC) | Prompt time | Cumulative |
 | ------ | ------------- | -------------- | ----------- | ---------- |
 | 1 — Foundation (schema, seed, auth, shell) | 00:00 | 00:10 | ~10 min | ~10 min |
-| 2 — Backend (reads, decision service, tests) | 00:10 | 00:18 | ~8 min | **~18 min** |
+| 2 — Backend (reads, decision service, tests) | 00:10 | 00:18 | ~8 min | ~18 min |
+| 1.5 — Parallel foundation audit (3 child sessions) | 00:17 | 00:33 | ~16 min | **~34 min** |
 
 ---
 
@@ -158,3 +159,20 @@ Any throw after step 1 rolls back both writes. Transient SQLite contention (P203
 Prompt 3: reviewer interface (queue with filters/search, case detail with evidence + history,
 decision form with reason + optimistic-concurrency handling), server-rendered pages calling
 the same `requireUser`/`requireReviewer` helpers.
+
+---
+
+## Step 1.5 — Parallel foundation audit (coordinator)
+
+- **Window:** 00:17–00:33 UTC (~16 min; target was 15). Cumulative **~34 min** of the 120-min hard limit.
+- **Audited revision:** `eb7ec790237afd628768cb0bbd452700bdd8a15c` (Prompt 1 foundation commit). Chosen because the user framed decision endpoints as not yet built for this audit; the Prompt 2 commit `e6b1dc7` was left untouched and unaudited. Checkpoint hygiene verified before launch: no `.env`, `*.db`, `node_modules`, `.next` tracked; only `.env.example` placeholders.
+- **Child sessions (Managed Devins, launched concurrently 00:19 UTC, all detached to the same SHA):**
+  1. Auth & permission foundation — https://app.devin.ai/sessions/ead65b09b2044cca8297cf84eeb37f54 (~7 min)
+  2. Data model, seed, persistence — https://app.devin.ai/sessions/a7d48cfced28488eb4d12d94d700660b (~6–7 min)
+  3. Reproducibility & Step 2 readiness — https://app.devin.ai/sessions/7484545b15ab4c758a99a0149c78494a (~10 min)
+- **Reported usage:** ACUs not visible inside the children; coordinator API showed `0.0` per child at settle time (likely reporting lag) — not reliably reported.
+- **Outcome:** **READY FOR STEP 2.** 0 BLOCKER; 3 IMPORTANT non-gating confirmed defects (inactive user's session not revoked at the library `get-session` endpoint; unedited `.env.example` accepted; `next build` requires `BETTER_AUTH_SECRET`); 6 OPTIONAL hygiene items; 8 unverified concerns kept separate. Full consolidation, smallest fixes, and verification commands: `docs/foundation-audit.md`.
+- **Application code changed in this step:** none.
+
+### Next step
+Prompt 3: reviewer interface. Fold the three IMPORTANT audit fixes (C1–C3 in `docs/foundation-audit.md`) into that step.
